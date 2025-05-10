@@ -235,11 +235,9 @@ if __name__ == "__main__":
         if hostname in target_host:
             for batch_size in DEFAULT_BATCH_SIZES:
                 vram_transfer(mode='target', block_size=DEFAULT_BLOCK_SIZE, batch_size=batch_size)
-                time.sleep(30)
         elif hostname in client_host:
             for batch_size in DEFAULT_BATCH_SIZES:
                 vram_transfer(mode=None, block_size=DEFAULT_BLOCK_SIZE, batch_size=batch_size)
-                time.sleep(30)
         else:
             logging.error(f"Unexpected hostname: {hostname}")
             sys.exit(1)
