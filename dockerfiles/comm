@@ -1,1 +1,27 @@
+FROM nvcr.io/nvidia/pytorch:25.04-py3 as base
+
+#doca-ofed-userspace
+RUN apt-get update
+RUN export DOCA_URL="https://linux.mellanox.com/public/repo/doca/2.10.0/ubuntu24.04/x86_64/" && \
+    curl https://linux.mellanox.com/public/repo/doca/GPG-KEY-Mellanox.pub | gpg --dearmor > /etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub && \
+    echo "deb [signed-by=/etc/apt/trusted.gpg.d/GPG-KEY-Mellanox.pub] $DOCA_URL ./" > /etc/apt/sources.list.d/doca.list && \
+    apt update && \
+    apt-get -y install doca-ofed-userspace
+
+#rebuild perftest for cuda suport
+WORKDIR /workspace
+RUN git clone https://github.com/linux-rdma/perftest.git && \
+    cd perftest && autoupdate && apt -y install libpci-dev && \
+    ./autogen.sh && ./configure CUDA_H_PATH=/usr/local/cuda/include/cuda.h --prefix=/usr/local/perftest && make -j && make install
+ENV PATH="/usr/local/perftest/bin:${PATH}"
+
+# TransferEngine
+WORKDIR /workspace
+RUN git clone https://github.com/kvcache-ai/Mooncake.git && \
+    cd Mooncake && \
+    bash dependencies.sh -y && \
+    mkdir build  && cd build && cmake .. -DUSE_ETCD=ON -DUSE_CUDA=ON && make -j
+RUN apt install -y etcd-server
+ENV export PATH=/workspace/Mooncake/build/mooncake-transfer-engine/example:$PATH
+ENV MC_GID_INDEX=3
 
