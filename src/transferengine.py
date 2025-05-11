@@ -88,7 +88,10 @@ class TRANSFERENGINE:
                 f'-operation={self.op}',
                 f'-block_size={self.block_size}',
                 f'-batch_size={self.batch_size}',
-                f'-buffer_size={self.buffer_size}'
+                f'-buffer_size={self.buffer_size}',
+                f'-duration=60',
+                f'-threads=1'
+                
             ]
             
             if self.gpuid is not None:
