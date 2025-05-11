@@ -13,11 +13,12 @@ DEFAULT_BUFFER_SIZE = 5 * 1024 * 1024 * 1024
 ETCD_PORT = 2379
 
 # Global configuration
+target_host = ['H20-GPU-01']
+client_host = ['H20-GPU-02']
 gpus = [0, 1, 2, 3, 4, 5, 6, 7]  # Default list of GPUs
-devs = ['mlx5_0','mlx5_3','mlx5_4','mlx5_5','mlx5_6','mlx5_9','mlx5_10','mlx5_11']
+devs = ['mlx5_3','mlx5_2','mlx5_1','mlx5_0','mlx5_5','mlx5_4','mlx5_7','mlx5_6']
 ports = [12345,12346,12347,12348,12349,12350,12351,12352]
-target_host = ['host1']
-client_host = ['host2']
+
 
 # Network configuration
 local_ip = socket.gethostname()
