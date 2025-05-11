@@ -26,7 +26,7 @@ meta_ip = target_host[0]
 
 class TRANSFERENGINE:
     def __init__(self, 
-                 mode: Optional[str] = None,
+                 mode: str = None,
                  meta_server: str = None,
                  local_server: str = None,
                  local_port: str = None,
@@ -38,25 +38,7 @@ class TRANSFERENGINE:
                  batch_size: int = 1000,
                  buffer_size: int = DEFAULT_BUFFER_SIZE,
                  segid: Optional[str] = None):
-        """
-        Initialize TRANSFERENGINE class
-        
-        Args:
-            mode (str, optional): Mode of operation ('target' or None)
-            meta_server (str): Metadata server address
-            local_server (str): Local server address
-            dev (str): Network device to use (e.g. 'mlx5_0')
-            vram (bool): Whether to use VRAM
-            gpuid (int, optional): GPU device ID to use
-            op (str): Operation type ('read' or 'write')
-            block_size (int): Size of each transfer block in bytes
-            batch_size (int): Number of blocks per batch
-            buffer_size (int): Size of transfer buffer in bytes
-            segid (str, optional): Segment ID to use
 
-        Raises:
-            ValueError: If required parameters are missing or invalid
-        """
         # Validate required parameters
         if meta_server is None:
             raise ValueError("meta_server is required")
@@ -64,8 +46,8 @@ class TRANSFERENGINE:
             raise ValueError("local_server is required")
         if dev is None:
             raise ValueError("dev is required")
-        if mode not in [None, 'target']:
-            raise ValueError("mode must be either None or 'target'")
+        if mode is None:
+            raise ValueError("mode is required")
         if op not in ['read', 'write']:
             raise ValueError("op must be either 'read' or 'write'")
 
@@ -97,6 +79,7 @@ class TRANSFERENGINE:
         try:
             cmd = [
                 'transfer_engine_bench',
+                f'--mode={self.mode}',
                 f'--metadata_server={self.meta_server}:{ETCD_PORT}',
                 f'--local_server_name={self.local_server}:{self.local_port}',
                 f'--device_name={self.dev}',
@@ -109,8 +92,6 @@ class TRANSFERENGINE:
             
             if self.gpuid is not None:
                 cmd.append(f'-gpu_id={self.gpuid}')
-            if self.mode is not None:
-                cmd.append(f'-mode={self.mode}')
             if self.segid is not None:
                 cmd.append(f'--segment_id={self.segid}')
 
@@ -146,24 +127,10 @@ class TRANSFERENGINE:
             except subprocess.TimeoutExpired:
                 self.process.kill()
 
-def vram_transfer(mode: Optional[str] = None, 
+def vram_transfer(mode: str = None, 
                  block_size: int = DEFAULT_BLOCK_SIZE, 
                  batch_size: int = 1000) -> List[subprocess.Popen]:
-    """
-    Create multiple TRANSFERENGINE instances for VRAM transfer
-    
-    Args:
-        mode (str, optional): Mode of operation ('target' or None)
-        block_size (int): Size of each transfer block in bytes
-        batch_size (int): Number of blocks per batch
-    
-    Returns:
-        List[subprocess.Popen]: List of transfer engine processes
-        
-    Raises:
-        ValueError: If GPU and device counts don't match
-        RuntimeError: If transfer engine creation or start fails
-    """
+
     processes = []
     instances = []
     
@@ -175,7 +142,7 @@ def vram_transfer(mode: Optional[str] = None,
         for i, gpu_id in enumerate(gpus):
             try:
                 transfer_engine = TRANSFERENGINE(
-                    mode=mode if mode == 'target' else None,
+                    mode=mode,
                     meta_server=meta_ip,
                     local_server=local_ip,
                     local_port=ports[i],
@@ -237,7 +204,7 @@ if __name__ == "__main__":
                 vram_transfer(mode='target', block_size=DEFAULT_BLOCK_SIZE, batch_size=batch_size)
         elif hostname in client_host:
             for batch_size in DEFAULT_BATCH_SIZES:
-                vram_transfer(mode=None, block_size=DEFAULT_BLOCK_SIZE, batch_size=batch_size)
+                vram_transfer(mode='initiator', block_size=DEFAULT_BLOCK_SIZE, batch_size=batch_size)
         else:
             logging.error(f"Unexpected hostname: {hostname}")
             sys.exit(1)
