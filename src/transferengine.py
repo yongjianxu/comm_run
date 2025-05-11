@@ -9,7 +9,7 @@ import signal
 # Configuration constants
 DEFAULT_BLOCK_SIZE = 512 * 8192
 DEFAULT_BATCH_SIZES = [100]
-DEFAULT_BUFFER_SIZE = 5 * 1024 * 1024 * 1024
+DEFAULT_BUFFER_SIZE = 10 * 1024 * 1024 * 1024
 ETCD_PORT = 2379
 
 # Global configuration
