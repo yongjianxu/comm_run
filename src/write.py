@@ -7,8 +7,8 @@ import os
 import glob
 hostname = socket.gethostname()
 # Test config
-clients = ['10.6.131.1']
-servers = ['10.6.131.2']
+clients = ['H20-GPU-01']
+servers = ['H20-GPU-02']
 # make sure ibdevs and cudevs matches in locality
 cudevs = [0,1,2,3,4,5,6,7]
 ibdevs = ['mlx5_3','mlx5_2','mlx5_1','mlx5_0','mlx5_5','mlx5_4','mlx5_7','mlx5_6']
