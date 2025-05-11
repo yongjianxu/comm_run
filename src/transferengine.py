@@ -152,7 +152,7 @@ def vram_transfer(mode: str = None,
                     gpuid=gpu_id,
                     block_size=block_size,
                     batch_size=batch_size,
-                    segid=f"{target_ip}:{ports[i]}" if mode is None else None
+                    segid=f"{target_ip}:{ports[i]}" if mode is 'initiator' else None
                 )
                 instances.append(transfer_engine)
             except Exception as e:
