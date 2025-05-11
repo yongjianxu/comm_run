@@ -7,11 +7,11 @@ import os
 import glob
 hostname = socket.gethostname()
 # Test config
-clients = ['host1']
-servers = ['host2']
+clients = ['10.6.131.1']
+servers = ['10.6.131.2']
 # make sure ibdevs and cudevs matches in locality
-ibdevs = ['mlx5_0','mlx5_3','mlx5_4','mlx5_5','mlx5_6','mlx5_9','mlx5_10','mlx5_11']
 cudevs = [0,1,2,3,4,5,6,7]
+ibdevs = ['mlx5_3','mlx5_2','mlx5_1','mlx5_0','mlx5_5','mlx5_4','mlx5_7','mlx5_6']
 ports = [6667,6668,6669,6670,6671,6672,6673,6674]
 
 class WRITE:
