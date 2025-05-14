@@ -1,5 +1,5 @@
 # comm_run
-provide the env and cmds to reproduce communication test done
+provide the env and cmds to reproduce some communication test
 
 communication type: in the project:
 1. ib_write_bw
