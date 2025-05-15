@@ -8,4 +8,5 @@ communication type: in the project:
 Node to node test. run 8 instance simutanously
 both GPU and CPU mem supported
 
+BUILD container image
 docker build -t nvcr.io/nvidia/pytorch:25.04-py3-comm -f comm .
