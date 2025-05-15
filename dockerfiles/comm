@@ -25,7 +25,7 @@ WORKDIR /workspace
 RUN git clone https://github.com/kvcache-ai/Mooncake.git && \
     cd Mooncake && \
     bash dependencies.sh -y && bash
-RUN cd /workspace/Mooncake mkdir build  && cd build && cmake .. -DUSE_ETCD=ON -DUSE_CUDA=ON && make -j
+RUN cd /workspace/Mooncake && mkdir build  && cd build && cmake .. -DUSE_ETCD=ON -DUSE_CUDA=ON && make -j
 RUN apt install -y etcd-server etcd-client
 ENV PATH=/workspace/Mooncake/build/mooncake-transfer-engine/example:$PATH
 ENV MC_GID_INDEX=3
