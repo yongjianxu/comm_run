@@ -13,5 +13,6 @@ BUILD container image
 docker build -t nvcr.io/nvidia/pytorch:25.04-py3-comm -f comm .
 
 start etdc metadata server
+
 etcd --listen-client-urls http://10.6.131.1:2379  --advertise-client-urls http://10.6.131.1:12345  
 
