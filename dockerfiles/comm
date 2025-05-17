@@ -88,3 +88,5 @@ ENV LD_LIBRARY_PATH=/usr/local/nixl/lib:$LD_LIBRARY_PATH
 ENV LIBRARY_PATH=/usr/local/nixl/lib:$LIBRARY_PATH
 ENV C_INCLUDE_PATH=/usr/local/nixl/include:$C_INCLUDE_PATH
 ENV PATH=/usr/local/nixl/bin:$PATH
+WORKDIR /workspace
+RUN cd nixl/benchmark/nixlbench && meson setup build -Dnixl_path=/usr/local/nixl && export LDFLAGS="-Wl,-rpath,/usr/local/nixl/lib/x86_64-linux-gnu" &&  cd build && ninja
