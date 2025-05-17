@@ -62,13 +62,20 @@ RUN wget https://github.com/openucx/ucx/releases/download/v1.18.0/ucx-1.18.0.tar
     tar xf ucx-1.18.0.tar.gz && cd ucx-1.18.0 && mkdir install && \
     ./configure --prefix=/workspace/ucx-1.18.0/install --enable-shared --disable-static --disable-doxygen-doc --enable-optimizations --enable-cma --enable-devel-headers --with-cuda=/usr/local/cuda --with-verbs --with-dm --with-gdrcopy=/usr/src/gdrdrv-2.4.1/ --enable-mt --without-go && \
     make -j && make -j install-strip 
-# protobuf for etcd
+# etcd-cpp-api
+# the dependencies&version are complex, need to complile from src
 WORKDIR /workspace
-RUN git clone --recurse-submodules https://github.com/protocolbuffers/protobuf.git && \
-    cd protobuf && git clone https://github.com/abseil/abseil-cpp.git && cd abseil-cpp && mkdir build && cd build && cmake .. -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE -DCMAKE_INSTALL_PREFIX=/usr/local/absl && make -j && make install && \
-    mkdir build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/protobuf -DABSL_ENABLE_INSTALL=ON -Dutf8_range_ENABLE_INSTALL=ON -Dprotobuf_BUILD_TESTS=OFF -Dabsl_DIR=/usr/local/absl/lib/cmake/absl && \
-    cmake --build . --target install
-    
+RUN git clone -b v3.21.12 https://github.com/protocolbuffers/protobuf.git && \
+    cd protobuf && git submodule update --init --recursive && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local .. && make -j && make install
+ENV LIBRARY_PATH=/usr/local/lib:$LIBRARY_PATH
+ENV C_INCLUDE_PATH=/usr/local/include:$C_INCLUDE_PATH
+ENV PATH=/usr/local/bin:$PATH 
+RUN git clone -b v1.51.1 https://github.com/grpc/grpc.git && \
+    cd grpc && git submodule update --init --recursive && mkdir build && cd build && cmake -DgRPC_INSTALL=ON -DgRPC_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local -DCMAKE_BUILD_TYPE=Release .. && make -j && make install
+RUN git clone https://github.com/gogo/protobuf.git gogo-protobuf && \
+    cd gogo-protobuf && make install
+RUN git clone https://github.com/etcd-cpp-apiv3/etcd-cpp-apiv3.git && \
+    cd /workspace/etcd-cpp-apiv3 && mkdir build && cd build && cmake .. -DCMAKE_BUILD_TYPE=Release && make -j && make install 
 
 # NIXL
 WORKDIR /workspace
