@@ -8,7 +8,7 @@ RUN export DOCA_URL="https://linux.mellanox.com/public/repo/doca/2.10.0/ubuntu24
     apt update && \
     apt-get -y install doca-ofed-userspace
 # sshd
-apt install -y openssh-server
+RUN apt install -y openssh-server
 #rebuild perftest for cuda suport
 WORKDIR /workspace
 RUN git clone https://github.com/linux-rdma/perftest.git && \
