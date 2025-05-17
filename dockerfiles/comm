@@ -25,27 +25,46 @@ RUN git clone https://github.com/intel/pcm.git && \
 WORKDIR /workspace
 RUN git clone https://github.com/kvcache-ai/Mooncake.git && \
     cd Mooncake && \
-    bash dependencies.sh -y && \
+    bash dependencies.sh -y && bash
+RUN apt install -y golang-go
 RUN cd /workspace/Mooncake && mkdir build  && cd build && cmake .. -DUSE_ETCD=ON -DUSE_CUDA=ON && make -j
 RUN apt install -y etcd-server etcd-client
 ENV PATH=/workspace/Mooncake/build/mooncake-transfer-engine/example:$PATH
 ENV MC_GID_INDEX=3
 
-# gdrcopy
-WORKDIR /workspace
-RUN git clone https://github.com/NVIDIA/gdrcopy.git && \
-    cd gdrcopy && mkdir build && mkdir install && \
-    make prefix=/workspace/gdrcopy/install CUDA=/usr/local/cuda all install
-ENV PATH=/workspace/gdrcopy/install/bin:$PATH
+# GDRCOPY install.
+# follow deepep dockerfile
+WORKDIR /tmp
+RUN git clone https://github.com/NVIDIA/gdrcopy.git
+WORKDIR /tmp/gdrcopy
+RUN git checkout v2.4.1
+
+RUN apt update
+RUN apt install -y nvidia-dkms-535
+RUN apt install -y build-essential devscripts debhelper fakeroot pkg-config dkms
+RUN apt install -y check libsubunit0 libsubunit-dev
+
+WORKDIR /tmp/gdrcopy/packages
+RUN CUDA=/usr/local/cuda ./build-deb-packages.sh
+RUN dpkg -i gdrdrv-dkms_*.deb
+RUN dpkg -i libgdrapi_*.deb
+RUN dpkg -i gdrcopy-tests_*.deb
+RUN dpkg -i gdrcopy_*.deb
+
+ENV GDRCOPY_HOME=/usr/src/gdrdrv-2.4.1/
 
 # ucx 1.18.0
+# install ucx in private path for NIXL only
+# /usr/local/ucx ->/opt/hpcx/ucx kept as orginal. other apps can use it
+# ucx use the gdrcopy from previous step
 WORKDIR /workspace
 RUN wget https://github.com/openucx/ucx/releases/download/v1.18.0/ucx-1.18.0.tar.gz && \
-    tar xf ucx-1.18.0.tar.gz && cd ucx-1.18.0 && make install && \
-    ./configure --prefix=/workspace/ucx-1.18.0/install --enable-shared --disable-static --disable-doxygen-doc --enable-optimizations --enable-cma --enable-devel-headers --with-cuda=/usr/local/cuda --with-verbs --with-dm --with-gdrcopy=//workspace/gdrcopy/install --enable-mt --without-go && \
+    tar xf ucx-1.18.0.tar.gz && cd ucx-1.18.0 && mkdir install && \
+    ./configure --prefix=/workspace/ucx-1.18.0/install --enable-shared --disable-static --disable-doxygen-doc --enable-optimizations --enable-cma --enable-devel-headers --with-cuda=/usr/local/cuda --with-verbs --with-dm --with-gdrcopy=/usr/src/gdrdrv-2.4.1/ --enable-mt --without-go && \
     make -j && make -j install-strip && ldconfig
 # NIXL
 WORKDIR /workspace
-RUN git clone https://github.com/ai-dynamo/nixl.git && \
-    apt install -y build-essential cmake pkg-config && \
+RUN apt install -y build-essential cmake pkg-config && \
     pip3 install meson ninja pybind11
+RUN git clone https://github.com/ai-dynamo/nixl.git && \
+    cd nixl && meson setup build --prefix=/usr/local/nixl -Ducx_path=/workspace/ucx-1.18.0/install -Dinstall_headers=true
