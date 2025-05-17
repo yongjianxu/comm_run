@@ -64,6 +64,7 @@ RUN wget https://github.com/openucx/ucx/releases/download/v1.18.0/ucx-1.18.0.tar
     make -j && make -j install-strip 
 # etcd-cpp-api
 # the dependencies&version are complex, need to complile from src
+RUN apt install -y libcpprest-dev
 WORKDIR /workspace
 RUN git clone -b v3.21.12 https://github.com/protocolbuffers/protobuf.git && \
     cd protobuf && git submodule update --init --recursive && mkdir build && cd build && cmake -DCMAKE_BUILD_TYPE=Release -Dprotobuf_BUILD_TESTS=OFF -DCMAKE_INSTALL_PREFIX=/usr/local .. && make -j && make install
