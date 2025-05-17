@@ -1,0 +1,297 @@
+diff -Naur mooncake-transfer-engine/example/transfer_engine_bench.cpp mooncake-transfer-engine_new/example/transfer_engine_bench.cpp
+--- mooncake-transfer-engine/example/transfer_engine_bench.cpp	2025-05-14 08:42:27.374601405 +0000
++++ mooncake-transfer-engine_new/example/transfer_engine_bench.cpp	2025-05-14 15:23:28.776634194 +0000
+@@ -357,7 +357,6 @@
+     LOG(INFO) << "Received signal " << signum << ", stopping target server...";
+     target_running = false;  
+ }
+-
+ int target() {
+     signal(SIGINT, signalHandler);
+     signal(SIGTERM, signalHandler);
+@@ -384,18 +383,31 @@
+     }
+ 
+     std::vector<void *> addr(NR_SOCKETS, nullptr);
+-    for (int i = 0; i < NR_SOCKETS; ++i) {
+-        addr[i] = allocateMemoryPool(FLAGS_buffer_size, i);
+-        memset(addr[i], 'x', FLAGS_buffer_size);
++    int buffer_num = NR_SOCKETS;
++
++#ifdef USE_CUDA
++    buffer_num = FLAGS_use_vram ? 1 : NR_SOCKETS;
++    if (FLAGS_use_vram) LOG(INFO) << "VRAM is used";
++    for (int i = 0; i < buffer_num; ++i) {
++        addr[i] = allocateMemoryPool(FLAGS_buffer_size, i, FLAGS_use_vram);
++        std::string name_prefix = FLAGS_use_vram ? "cuda:" : "cpu:";
++        int rc = engine->registerLocalMemory(addr[i], FLAGS_buffer_size,
++                                             name_prefix + std::to_string(i));
++        LOG_ASSERT(!rc);
++    }
++#else
++    for (int i = 0; i < buffer_num; ++i) {
++        addr[i] = allocateMemoryPool(FLAGS_buffer_size, i, false);
+         int rc = engine->registerLocalMemory(addr[i], FLAGS_buffer_size,
+                                              "cpu:" + std::to_string(i));
+         LOG_ASSERT(!rc);
+     }
++#endif
+ 
+     LOG(INFO) << "numa node num: " << NR_SOCKETS;
+ 
+     while (target_running) sleep(1);
+-    for (int i = 0; i < NR_SOCKETS; ++i) {
++    for (int i = 0; i < buffer_num; ++i) {
+         engine->unregisterLocalMemory(addr[i]);
+         freeMemoryPool(addr[i], FLAGS_buffer_size);
+     }
+diff -Naur mooncake-transfer-engine/include/config.h mooncake-transfer-engine_new/include/config.h
+--- mooncake-transfer-engine/include/config.h	2025-05-14 08:42:27.374601405 +0000
++++ mooncake-transfer-engine_new/include/config.h	2025-05-14 15:23:28.780634118 +0000
+@@ -31,14 +31,14 @@
+     int gid_index = 0;
+     size_t max_cqe = 4096;
+     int max_ep_per_ctx = 256;
+-    size_t num_qp_per_ep = 2;
+-    size_t max_sge = 4;
+-    size_t max_wr = 256;
++    size_t num_qp_per_ep = 16;
++    size_t max_sge = 8;
++    size_t max_wr = 4096;
+     size_t max_inline = 64;
+     ibv_mtu mtu_length = IBV_MTU_4096;
+     uint16_t handshake_port = 12001;
+     int workers_per_ctx = 2;
+-    size_t slice_size = 65536;
++    size_t slice_size = 1048576;
+     int retry_cnt = 8;
+     bool metacache = true;
+     int log_level = google::INFO;
+@@ -56,4 +56,4 @@
+ uint16_t getDefaultHandshakePort();
+ }  // namespace mooncake
+ 
+-#endif  // CONFIG_H
+\ No newline at end of file
++#endif  // CONFIG_H
+diff -Naur mooncake-transfer-engine/include/transport/rdma_transport/rdma_endpoint.h mooncake-transfer-engine_new/include/transport/rdma_transport/rdma_endpoint.h
+--- mooncake-transfer-engine/include/transport/rdma_transport/rdma_endpoint.h	2025-05-14 08:42:27.374601405 +0000
++++ mooncake-transfer-engine_new/include/transport/rdma_transport/rdma_endpoint.h	2025-05-14 15:23:28.784634045 +0000
+@@ -73,10 +73,7 @@
+ 
+     bool active() const { return active_; }
+ 
+-    void set_active(bool flag) { 
+-        RWSpinlock::WriteGuard guard(lock_);
+-        active_ = flag; 
+-    }
++    void set_active(bool flag) { active_ = flag; }
+ 
+    public:
+     bool connected() const {
+diff -Naur mooncake-transfer-engine/src/transfer_engine.cpp mooncake-transfer-engine_new/src/transfer_engine.cpp
+--- mooncake-transfer-engine/src/transfer_engine.cpp	2025-05-14 08:42:27.374601405 +0000
++++ mooncake-transfer-engine_new/src/transfer_engine.cpp	2025-05-14 15:23:28.800633746 +0000
+@@ -41,30 +41,22 @@
+                          const std::string &local_server_name,
+                          const std::string &ip_or_host_name,
+                          uint64_t rpc_port) {
+-    LOG(INFO) << "Transfer Engine starting. Server: " << local_server_name
+-              << ", Metadata: " << metadata_conn_string
+-              << ", ip_or_host_name: " << ip_or_host_name
+-              << ", rpc_port: " << rpc_port;
+-
+     local_server_name_ = local_server_name;
+     TransferMetadata::RpcMetaDesc desc;
+-    std::string rpc_binding_method;
+-
+     if (getenv("MC_LEGACY_RPC_PORT_BINDING") ||
+         metadata_conn_string == P2PHANDSHAKE) {
+-        rpc_binding_method = "legacy/P2P";
+         auto [host_name, port] = parseHostNameWithPort(local_server_name);
+         desc.ip_or_host_name = host_name;
+         desc.rpc_port = port;
+         desc.sockfd = -1;
+ 
+         if (metadata_conn_string == P2PHANDSHAKE) {
+-            rpc_binding_method = "P2P handshake";
++            // use random port when no port is specified
+             if (port == getDefaultHandshakePort()) {
+                 desc.rpc_port = findAvailableTcpPort(desc.sockfd);
+                 if (desc.rpc_port == 0) {
+                     LOG(ERROR)
+-                        << "P2P: No valid port found for local TCP service.";
++                        << "not valid port for serving local TCP service";
+                     return -1;
+                 }
+             }
+@@ -72,7 +64,6 @@
+                 desc.ip_or_host_name + ":" + std::to_string(desc.rpc_port);
+         }
+     } else {
+-        rpc_binding_method = "new RPC mapping";
+         (void)(ip_or_host_name);
+         auto *ip_address = getenv("MC_TCP_BIND_ADDRESS");
+         if (ip_address)
+@@ -97,9 +88,9 @@
+         }
+     }
+ 
+-    LOG(INFO) << "Transfer Engine RPC using " << rpc_binding_method
+-              << ", listening on " << desc.ip_or_host_name << ":"
+-              << desc.rpc_port;
++    LOG(INFO) << "Transfer Engine uses address " << desc.ip_or_host_name
++              << " and port " << desc.rpc_port
++              << " for serving local TCP service";
+ 
+     metadata_ = std::make_shared<TransferMetadata>(metadata_conn_string);
+     multi_transports_ =
+@@ -109,23 +100,20 @@
+     if (ret) return ret;
+ 
+     if (auto_discover_) {
+-        LOG(INFO) << "Auto-discovering topology...";
++        // discover topology automatically
+         if (getenv("MC_CUSTOM_TOPO_JSON")) {
+             auto path = getenv("MC_CUSTOM_TOPO_JSON");
+-            LOG(INFO) << "Using custom topology from: " << path;
+             auto topo_json = loadTopologyJsonFile(path);
+-            if (!topo_json.empty()) {
++            if (!topo_json.empty())
+                 local_topology_->parse(topo_json);
+-            } else {
+-                LOG(WARNING) << "Failed to load custom topology from " << path
+-                             << ", falling back to auto-detect.";
++            else {
++                LOG(WARNING) << "Unable to read custom topology file from "
++                             << path << ", fall back to auto-detect";
+                 local_topology_->discover(filter_);
+             }
+         } else {
+             local_topology_->discover(filter_);
+         }
+-        LOG(INFO) << "Topology discovery complete. Found "
+-                  << local_topology_->getHcaList().size() << " HCAs.";
+ 
+         if (local_topology_->getHcaList().size() > 0) {
+             // only install RDMA transport when there is at least one HCA
+@@ -202,7 +190,7 @@
+ 
+ int TransferEngine::closeSegment(Transport::SegmentHandle handle) { return 0; }
+ 
+-int TransferEngine::removeLocalSegment(const std::string &segment_name) {
++int TransferEngine::removeLocalSegment(const std::string &segment_name) { 
+     if (segment_name.empty()) return ERR_INVALID_ARGUMENT;
+     std::string trimmed_segment_name = segment_name;
+     while (!trimmed_segment_name.empty() && trimmed_segment_name[0] == '/')
+diff -Naur mooncake-transfer-engine/src/transport/rdma_transport/rdma_endpoint.cpp mooncake-transfer-engine_new/src/transport/rdma_transport/rdma_endpoint.cpp
+--- mooncake-transfer-engine/src/transport/rdma_transport/rdma_endpoint.cpp	2025-05-14 08:42:27.374601405 +0000
++++ mooncake-transfer-engine_new/src/transport/rdma_transport/rdma_endpoint.cpp	2025-05-14 15:23:28.800633746 +0000
+@@ -248,7 +248,6 @@
+     std::vector<Transport::Slice *> &slice_list,
+     std::vector<Transport::Slice *> &failed_slice_list) {
+     RWSpinlock::WriteGuard guard(lock_);
+-    if (!active_) return 0;
+     int qp_index = SimpleRandom::Get().next(qp_list_.size());
+     int wr_count = std::min(max_wr_depth_ - wr_depth_list_[qp_index],
+                             (int)slice_list.size());
+diff -Naur mooncake-transfer-engine/src/transport/tcp_transport/tcp_transport.cpp mooncake-transfer-engine_new/src/transport/tcp_transport/tcp_transport.cpp
+--- mooncake-transfer-engine/src/transport/tcp_transport/tcp_transport.cpp	2025-05-14 08:42:27.378601333 +0000
++++ mooncake-transfer-engine_new/src/transport/tcp_transport/tcp_transport.cpp	2025-05-14 15:23:28.804633672 +0000
+@@ -73,11 +73,6 @@
+             socket_, asio::buffer(&header_, sizeof(SessionHeader)),
+             [this, self](const asio::error_code &ec, std::size_t len) {
+                 if (ec || len != sizeof(SessionHeader)) {
+-                    LOG(ERROR)
+-                        << "Session::writeHeader failed. Error: "
+-                        << ec.message() << " (value: " << ec.value() << ")"
+-                        << ", bytes written: " << len
+-                        << ", expected: " << sizeof(SessionHeader);
+                     if (on_finalize_) on_finalize_(TransferStatusEnum::FAILED);
+                     session_mutex_.unlock();
+                     return;
+@@ -96,11 +91,6 @@
+             socket_, asio::buffer(&header_, sizeof(SessionHeader)),
+             [this, self](const asio::error_code &ec, std::size_t len) {
+                 if (ec || len != sizeof(SessionHeader)) {
+-                    LOG(ERROR)
+-                        << "Session::readHeader failed. Error: " << ec.message()
+-                        << " (value: " << ec.value() << ")"
+-                        << ", bytes read: " << len
+-                        << ", expected: " << sizeof(SessionHeader);
+                     if (on_finalize_) on_finalize_(TransferStatusEnum::FAILED);
+                     session_mutex_.unlock();
+                     return;
+@@ -133,12 +123,6 @@
+             [this, addr, self](const asio::error_code &ec,
+                                std::size_t transferred_bytes) {
+                 if (ec) {
+-                    LOG(ERROR)
+-                        << "Session::writeBody failed. Error: " << ec.message()
+-                        << " (value: " << ec.value() << ")"
+-                        << ", total_transferred_bytes_: "
+-                        << total_transferred_bytes_
+-                        << ", current transferred_bytes: " << transferred_bytes;
+                     if (on_finalize_) on_finalize_(TransferStatusEnum::FAILED);
+                     session_mutex_.unlock();
+                     return;
+@@ -167,12 +151,6 @@
+             [this, addr, self](const asio::error_code &ec,
+                                std::size_t transferred_bytes) {
+                 if (ec) {
+-                    LOG(ERROR)
+-                        << "Session::readBody failed. Error: " << ec.message()
+-                        << " (value: " << ec.value() << ")"
+-                        << ", total_transferred_bytes_: "
+-                        << total_transferred_bytes_
+-                        << ", current transferred_bytes: " << transferred_bytes;
+                     if (on_finalize_) on_finalize_(TransferStatusEnum::FAILED);
+                     session_mutex_.unlock();
+                     return;
+@@ -373,9 +351,7 @@
+             context_->doAccept();
+             context_->io_context.run();
+         } catch (std::exception &e) {
+-            LOG(ERROR) << "TcpTransport::worker encountered an exception "
+-                          "during doAccept/run: "
+-                       << e.what();
++            LOG(ERROR) << "TcpTransport: exception: " << e.what();
+         }
+     }
+ }
+@@ -386,18 +362,12 @@
+         asio::ip::tcp::socket socket(context_->io_context);
+         auto desc = metadata_->getSegmentDescByID(slice->target_id);
+         if (!desc) {
+-            LOG(ERROR) << "TcpTransport::startTransfer failed to get segment "
+-                          "description for target_id: "
+-                       << slice->target_id;
+             slice->markFailed();
+             return;
+         }
+ 
+         TransferMetadata::RpcMetaDesc meta_entry;
+         if (metadata_->getRpcMetaEntry(desc->name, meta_entry)) {
+-            LOG(ERROR) << "TcpTransport::startTransfer failed to get RPC meta "
+-                          "entry for segment name: "
+-                       << desc->name;
+             slice->markFailed();
+             return;
+         }
+@@ -415,13 +385,8 @@
+         session->initiate(slice->source_addr, slice->tcp.dest_addr,
+                           slice->length, slice->opcode);
+     } catch (std::exception &e) {
+-        LOG(ERROR) << "TcpTransport::startTransfer encountered an ASIO "
+-                      "exception. Slice details - source_addr: "
+-                   << slice->source_addr << ", length: " << slice->length
+-                   << ", opcode: " << (int)slice->opcode
+-                   << ", target_id: " << slice->target_id
+-                   << ". Exception: " << e.what();
++        LOG(ERROR) << "TcpTransport: ASIO exception: " << e.what();
+         slice->markFailed();
+     }
+ }
+-}  // namespace mooncake
++}  // namespace mooncake
+\ No newline at end of file
