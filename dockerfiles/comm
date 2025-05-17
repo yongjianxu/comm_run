@@ -61,7 +61,7 @@ WORKDIR /workspace
 RUN wget https://github.com/openucx/ucx/releases/download/v1.18.0/ucx-1.18.0.tar.gz && \
     tar xf ucx-1.18.0.tar.gz && cd ucx-1.18.0 && mkdir install && \
     ./configure --prefix=/workspace/ucx-1.18.0/install --enable-shared --disable-static --disable-doxygen-doc --enable-optimizations --enable-cma --enable-devel-headers --with-cuda=/usr/local/cuda --with-verbs --with-dm --with-gdrcopy=/usr/src/gdrdrv-2.4.1/ --enable-mt --without-go && \
-    make -j && make -j install-strip && ldconfig
+    make -j && make -j install-strip 
 # NIXL
 WORKDIR /workspace
 RUN apt install -y build-essential cmake pkg-config && \
