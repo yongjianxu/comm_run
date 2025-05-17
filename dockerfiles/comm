@@ -66,7 +66,7 @@ RUN wget https://github.com/openucx/ucx/releases/download/v1.18.0/ucx-1.18.0.tar
 WORKDIR /workspace
 RUN git clone --recurse-submodules https://github.com/protocolbuffers/protobuf.git && \
     cd protobuf && git clone https://github.com/abseil/abseil-cpp.git && cd abseil-cpp && mkdir build && cd build && cmake .. -DCMAKE_POSITION_INDEPENDENT_CODE=TRUE -DCMAKE_INSTALL_PREFIX=/usr/local/absl && make -j && make install && \
-    mkdir build && cd build && cmake .. DCMAKE_INSTALL_PREFIX=/usr/local/protobuf -DABSL_ENABLE_INSTALL=ON -Dutf8_range_ENABLE_INSTALL=ON -Dprotobuf_BUILD_TESTS=OFF -Dabsl_DIR=/usr/local/absl/lib/cmake/absl && \
+    mkdir build && cd build && cmake .. -DCMAKE_INSTALL_PREFIX=/usr/local/protobuf -DABSL_ENABLE_INSTALL=ON -Dutf8_range_ENABLE_INSTALL=ON -Dprotobuf_BUILD_TESTS=OFF -Dabsl_DIR=/usr/local/absl/lib/cmake/absl && \
     cmake --build . --target install
     
 
